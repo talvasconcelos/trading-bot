@@ -1,4 +1,5 @@
 from strategies.ta_summary import TAS
+from strategies.ma_crossover_50_200 import MACrossover
 import os
 import yaml
 
@@ -15,12 +16,23 @@ lnm_options = yaml_file["lnm_credentials"]
 
 # call the bot you have choosed in configuration file
 def bot():
-    if yaml_file['strategies']['ta_summary']:
+    if yaml_file['strategies'].get('ma_crossover_50_200'):
+        config = yaml_file['ma_crossover_50_200']
+        return MACrossover.run(MACrossover(lnm_options),
+                                quantity = config['quantity'],
+                                leverage = config['leverage'],
+                                takeprofit = config['takeprofit'],
+                                stoploss = config['stoploss'],
+                                interval = config['interval'],
+                                timeout = config['timeout'])
+    elif yaml_file['strategies']['ta_summary']:
         config = yaml_file['ta_summary']
-        return TAS.ta_summary(TAS(lnm_options), 
-                                    quantity = config['quantity'], 
+        return TAS.ta_summary(TAS(lnm_options),
+                                    quantity = config['quantity'],
                                     leverage = config['leverage'],
                                     takeprofit = config['takeprofit'],
                                     stoploss = config['stoploss'],
-                                    interval = config['interval'], 
+                                    interval = config['interval'],
                                     timeout = config['timeout'])
+    else:
+        return "No strategy selected in configuration"
