@@ -107,23 +107,35 @@ class CCXTBacktester:
     def generate_signals(self, df: pd.DataFrame,
                          use_trend_filter: bool = True,
                          use_oi_filter: bool = True,
-                         oi_threshold: float = 0.0) -> pd.DataFrame:
+                         oi_threshold: float = 0.0,
+                         min_separation: float = 0.0) -> pd.DataFrame:
         df['signal'] = 0
         df.loc[df['fast_ma'] > df['slow_ma'], 'signal'] = 1   # Long
         df.loc[df['fast_ma'] < df['slow_ma'], 'signal'] = -1  # Short
         df['filtered_signal'] = df['signal'].copy()
+
+        # Separation filter: require MA difference to exceed threshold (to avoid whipsaws)
+        if min_separation > 0:
+            sep = (df['fast_ma'] - df['slow_ma']) / df['slow_ma']
+            long_ok = sep >= min_separation
+            short_ok = sep <= -min_separation
+            df.loc[~long_ok & (df['filtered_signal'] == 1), 'filtered_signal'] = 0
+            df.loc[~short_ok & (df['filtered_signal'] == -1), 'filtered_signal'] = 0
+
         # Trend filter: require price > trend_ma for long, < trend_ma for short
         if use_trend_filter and 'trend_ma' in df.columns:
             bullish = df['close'] > df['trend_ma']
             bearish = df['close'] < df['trend_ma']
             df.loc[~bullish & (df['filtered_signal'] == 1), 'filtered_signal'] = 0
             df.loc[~bearish & (df['filtered_signal'] == -1), 'filtered_signal'] = 0
+
         # OI filter: long requires oi_change > threshold, short requires oi_change < -threshold
         if use_oi_filter and 'oi_change' in df.columns:
             long_ok = df['oi_change'] > oi_threshold
             short_ok = df['oi_change'] < -oi_threshold
             df.loc[~long_ok & (df['filtered_signal'] == 1), 'filtered_signal'] = 0
             df.loc[~short_ok & (df['filtered_signal'] == -1), 'filtered_signal'] = 0
+
         df['position'] = df['filtered_signal'].shift(1)
         return df
 
@@ -213,9 +225,10 @@ class CCXTBacktester:
         commission: float = 0.001,
         use_trend_filter: bool = True,
         trend_ma_period: int = 200,
-        use_oi_filter: bool = True,
+        use_oi_filter: bool = False,
         oi_periods: int = 1,
         oi_threshold: float = 0.0,
+        min_separation: float = 0.0,
         plot: bool = True
     ) -> Tuple[pd.DataFrame, Dict]:
         """Run backtest with optional trend and OI filters."""
@@ -249,7 +262,7 @@ class CCXTBacktester:
         print(f"After dropping NaNs, {len(df)} rows remain")
 
         print("Generating signals...")
-        df = self.generate_signals(df, use_trend_filter, use_oi_filter, oi_threshold)
+        df = self.generate_signals(df, use_trend_filter, use_oi_filter, oi_threshold, min_separation)
 
         print("Calculating returns...")
         df = self.calculate_returns(df, initial_capital, commission)
@@ -274,18 +287,19 @@ def enhanced_ma_crossover_strategy(
     fast_period: int = 20,
     slow_period: int = 50,
     exchange: str = 'binance',
-    symbol: str = 'BTC/USDT:USDT',
+    symbol: str = 'BTC/USDT',
     timeframe: str = '1h',
     initial_capital: float = 10000.0,
     commission: float = 0.001,
     use_trend_filter: bool = True,
     trend_ma_period: int = 200,
-    use_oi_filter: bool = True,
+    use_oi_filter: bool = False,
     oi_periods: int = 1,
     oi_threshold: float = 0.0,
+    min_separation: float = 0.0,
     plot: bool = True
 ) -> Tuple[pd.DataFrame, Dict]:
-    """Enhanced Moving Average Crossover with trend and open interest filters."""
+    """Enhanced Moving Average Crossover with trend, OI, and separation filters."""
     backtester = CCXTBacktester(exchange, symbol, timeframe)
     return backtester.run_backtest(
         start_date=start_date,
@@ -299,6 +313,7 @@ def enhanced_ma_crossover_strategy(
         use_oi_filter=use_oi_filter,
         oi_periods=oi_periods,
         oi_threshold=oi_threshold,
+        min_separation=min_separation,
         plot=plot
     )
 
