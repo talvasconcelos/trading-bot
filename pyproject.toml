@@ -1,0 +1,15 @@
+[project]
+name = "trading-bot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ln-markets>=2.0.1",
+    "pyaml>=6.0",
+    "tradingview-ta>=3.2.9",
+    "pandas>=1.4.2",
+]
+
+[project.scripts]
+trading-bot = "main:main"
