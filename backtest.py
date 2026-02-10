@@ -31,41 +31,60 @@ class CCXTBacktester:
         since = self.exchange.parse8601(f"{start_date}T00:00:00Z")
         end_time = self.exchange.parse8601(f"{end_date}T23:59:59Z") if end_date else None
 
+        print(f"Fetching data: start={since} (from {start_date}), end_time={end_time} (from {end_date})")
+
         all_ohlcv = []
+        loop_count = 0
         while True:
+            loop_count += 1
             try:
+                print(f"Loop {loop_count}: fetching since={since} ({pd.to_datetime(since, unit='ms')})")
                 ohlcv = self.exchange.fetch_ohlcv(
                     self.symbol,
                     self.timeframe,
                     since,
                     limit=1000
                 )
+                print(f"  Fetched {len(ohlcv)} candles")
                 if not ohlcv:
+                    print("  No data returned, breaking")
                     break
 
                 all_ohlcv.extend(ohlcv)
                 since = ohlcv[-1][0] + self.exchange.parse_timeframe(self.timeframe) * 1000
+                print(f"  Updated since to {since} ({pd.to_datetime(since, unit='ms')})")
 
                 if end_time and since > end_time:
+                    print(f"  since > end_time, breaking")
                     break
 
-                if len(ohlcv) < 1000:  # Less than limit means we reached the end
+                if len(ohlcv) < 1000:
+                    print(f"  Less than limit, breaking")
                     break
 
             except Exception as e:
                 print(f"Error fetching data: {e}")
                 break
 
+        print(f"Total candles collected: {len(all_ohlcv)}")
         df = pd.DataFrame(
             all_ohlcv,
             columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
         )
+        if len(df) == 0:
+            print("Returning empty DataFrame")
+            return df
+
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
 
         if end_time:
-            df = df[df.index <= pd.to_datetime(end_time)]
+            before_filter = len(df)
+            end_timestamp = pd.to_datetime(end_time, unit='ms')
+            df = df[df.index <= end_timestamp]
+            print(f"Filtered by end_time: {before_filter} -> {len(df)} rows")
 
+        print(f"Returning DataFrame with {len(df)} rows")
         return df
 
     def calculate_indicators(self, df: pd.DataFrame, fast_period: int = 20, slow_period: int = 50) -> pd.DataFrame:
@@ -83,9 +102,21 @@ class CCXTBacktester:
         df['position'] = df['signal'].shift(1)  # Enter next bar
         return df
 
-    def calculate_returns(self, df: pd.DataFrame, initial_capital: float = 10000.0) -> pd.DataFrame:
-        """Calculate strategy returns"""
+    def calculate_returns(self, df: pd.DataFrame, initial_capital: float = 10000.0, commission: float = 0.001) -> pd.DataFrame:
+        """Calculate strategy returns
+
+        Args:
+            commission: Trading commission per trade (e.g., 0.001 = 0.1%)
+        """
+        df['position'] = df['position'].fillna(0)  # No position initially
         df['strategy_returns'] = df['position'] * df['returns']
+
+        # Deduct commission on each trade (when position changes)
+        position_change = df['position'].diff().abs().fillna(0)
+        df['commission_cost'] = position_change * commission
+        df['strategy_returns'] = df['strategy_returns'] - df['commission_cost']
+        df['strategy_returns'] = df['strategy_returns'].fillna(0)
+
         df['cumulative_returns'] = (1 + df['strategy_returns']).cumprod()
         df['portfolio_value'] = initial_capital * df['cumulative_returns']
         return df
@@ -121,6 +152,7 @@ class CCXTBacktester:
         fast_period: int = 20,
         slow_period: int = 50,
         initial_capital: float = 10000.0,
+        commission: float = 0.001,
         plot: bool = True
     ) -> Tuple[pd.DataFrame, Dict]:
         """
@@ -132,6 +164,7 @@ class CCXTBacktester:
             fast_period: Fast MA period
             slow_period: Slow MA period
             initial_capital: Starting capital
+            commission: Trading commission per trade (0.001 = 0.1%)
             plot: Whether to generate equity curve plot
 
         Returns:
@@ -148,7 +181,7 @@ class CCXTBacktester:
         df = self.generate_signals(df)
 
         print("Calculating returns...")
-        df = self.calculate_returns(df, initial_capital)
+        df = self.calculate_returns(df, initial_capital, commission)
 
         print("\n" + "="*50)
         print("BACKTEST RESULTS")
@@ -212,7 +245,8 @@ def simple_ma_crossover_strategy(
     exchange: str = 'binance',
     symbol: str = 'BTC/USDT',
     timeframe: str = '1h',
-    initial_capital: float = 10000.0
+    initial_capital: float = 10000.0,
+    commission: float = 0.001
 ) -> Tuple[pd.DataFrame, Dict]:
     """
     Simple Moving Average Crossover Trend Following Strategy
@@ -228,6 +262,7 @@ def simple_ma_crossover_strategy(
         fast_period=fast_period,
         slow_period=slow_period,
         initial_capital=initial_capital,
+        commission=commission,
         plot=True
     )
 
@@ -239,5 +274,6 @@ if __name__ == "__main__":
         end_date='2024-02-10',
         fast_period=20,
         slow_period=50,
-        initial_capital=10000.0
+        initial_capital=10000.0,
+        commission=0.001
     )
