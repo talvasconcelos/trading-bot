@@ -45,33 +45,22 @@ class CCXTBacktester:
             df = df[df.index <= end_ts]
         return df
 
-    def fetch_oi_history(self, start_timestamp: int, end_timestamp: int = None) -> pd.Series:
-        """Fetch open interest history for the symbol using self.oi_symbol."""
+    def fetch_oi_history(self, end_timestamp: int = None) -> pd.Series:
+        """Fetch latest open interest history (max ~500 records) for the symbol using self.oi_symbol.
+        Data is limited to recent period. Returns a time series indexed by timestamp."""
         try:
             if not hasattr(self.exchange, 'fetch_open_interest_history'):
                 print("Exchange does not support fetch_open_interest_history")
                 return pd.Series(dtype='float64')
-            all_oi = []
-            since = start_timestamp
-            tf_ms = self.exchange.parse_timeframe(self.timeframe) * 1000
-            while True:
-                try:
-                    oi_chunk = self.exchange.fetch_open_interest_history(self.oi_symbol, since=since, limit=1000)
-                except Exception as e:
-                    print(f"Error fetching OI chunk: {e}")
-                    break
-                if not oi_chunk:
-                    break
-                all_oi.extend(oi_chunk)
-                last_ts = oi_chunk[-1]['timestamp']
-                since = last_ts + tf_ms
-                if end_timestamp and since > end_timestamp:
-                    break
-                if len(oi_chunk) < 1000:
-                    break
-            if not all_oi:
+            # Fetch latest 500 records; Binance may not allow arbitrary since pagination
+            try:
+                oi_chunk = self.exchange.fetch_open_interest_history(self.oi_symbol, timeframe=self.timeframe, limit=500)
+            except Exception as e:
+                print(f"Error fetching OI: {e}")
                 return pd.Series(dtype='float64')
-            df_oi = pd.DataFrame(all_oi)
+            if not oi_chunk:
+                return pd.Series(dtype='float64')
+            df_oi = pd.DataFrame(oi_chunk)
             oi_col = None
             for col in ['openInterestAmount', 'sumOpenInterest', 'openInterest']:
                 if col in df_oi.columns:
@@ -84,10 +73,11 @@ class CCXTBacktester:
                 else:
                     return pd.Series(dtype='float64')
             series = pd.Series(df_oi[oi_col].values, index=pd.to_datetime(df_oi['timestamp'], unit='ms'), name='openInterest')
+            series = series.sort_index()
             if end_timestamp:
                 end_ts = pd.to_datetime(end_timestamp, unit='ms')
                 series = series[series.index <= end_ts]
-            return series.sort_index()
+            return series
         except Exception as e:
             print(f"Error in fetch_oi_history: {e}")
             return pd.Series(dtype='float64')
@@ -240,13 +230,14 @@ class CCXTBacktester:
         print(f"Fetched {len(df)} data points")
 
         if use_oi_filter:
-            start_ts = self.exchange.parse8601(f"{start_date}T00:00:00Z")
+            # OI data limited to most recent ~500 records; provide end timestamp to align
             end_ts = self.exchange.parse8601(f"{end_date}T23:59:59Z") if end_date else None
-            oi_series = self.fetch_oi_history(start_ts, end_ts)
+            oi_series = self.fetch_oi_history(end_ts)
             if oi_series.empty:
                 print("OI data unavailable; disabling OI filter")
                 use_oi_filter = False
             else:
+                # Align OI to price index, forward fill missing
                 df['openInterest'] = oi_series.reindex(df.index, method='ffill').values
 
         print("Calculating indicators...")
