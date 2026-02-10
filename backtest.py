@@ -2,6 +2,8 @@ import ccxt
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for headless environments
 import matplotlib.pyplot as plt
 from typing import Tuple, Dict
 
@@ -159,11 +161,12 @@ class CCXTBacktester:
         print("="*50 + "\n")
 
         if plot:
-            self.plot_results(df, fast_period, slow_period)
+            filename = f"backtest_{self.symbol.replace('/', '_')}_{self.timeframe}_{start_date}_to_{end_date or 'now'}_fast{fast_period}_slow{slow_period}.png"
+            self.plot_results(df, fast_period, slow_period, filename)
 
         return df, metrics
 
-    def plot_results(self, df: pd.DataFrame, fast_period: int, slow_period: int):
+    def plot_results(self, df: pd.DataFrame, fast_period: int, slow_period: int, filename: str = None):
         """Plot equity curve and signals"""
         fig, axes = plt.subplots(3, 1, figsize=(15, 10), sharex=True)
 
@@ -190,7 +193,15 @@ class CCXTBacktester:
         axes[2].grid(True, alpha=0.3)
 
         plt.tight_layout()
-        plt.show()
+
+        if filename:
+            plt.savefig(filename, dpi=100, bbox_inches='tight')
+            print(f"Plot saved to: {filename}")
+        else:
+            plt.savefig('backtest_results.png', dpi=100, bbox_inches='tight')
+            print("Plot saved to: backtest_results.png")
+
+        plt.close()
 
 
 def simple_ma_crossover_strategy(
