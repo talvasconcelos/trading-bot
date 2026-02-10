@@ -9,6 +9,19 @@ Please use carefully, preferably on Testnet or with small amounts.
 ## Install
 
 Download this Github repository and install dependencies.
+
+### Using uv (recommended)
+```
+uv sync
+```
+This will create a virtual environment and install all dependencies.
+
+To run the bot:
+```
+uv run python main.py
+```
+
+### Using pip (legacy)
 ```
 pip install -r requirements.txt
 ```
@@ -23,8 +36,14 @@ Without them, you will not be able to authenticate.
 
 > :warning: **Never share your API Key, Secret or Passphrase**
 
-Open the 'configuration.yml' file and complete with your LN Markets API credentials.
+Make a copy of `example.configuration.yml` and rename it to `configuration.yml`, then fill in your LN Markets API credentials.
+```
+cp example.configuration.yml configuration.yml
+```
+
 You can also add the parameter network with 'testnet' for [LN Markets Testnet](https://testnet.lnmarkets.com/) and 'mainnet' for [LN Markets mainnet](https://lnmarkets.com/).
+
+**Important:** The `configuration.yml` file is included in `.gitignore` and will not be synced to prevent accidental exposure of your credentials.
 
 ## Strategies
 
