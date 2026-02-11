@@ -1,8 +1,8 @@
 ## your personal information from LNMarkets
 lnm_credentials: 
-  key: 'your_api_key'
-  secret: 'your_api_secret'
-  passphrase: 'your_api_passphrase'
+  key: 'OeEkOjMQbTzjAjwQZDHi1hwNwprERY5ILP7L1a74ZGI='
+  secret: 'Y38KdprA9u5zIRrsW3hI8qnXUUrRyYWkc9qSIKdfyd9e6TFEkyOwIcoL/kW3TLxBR7llU3GbcoVPLZNvPdMaAg=='
+  passphrase: 'ceulbi2h142x4al9'
   network: 'mainnet'
 
 ## choose your strategy while affecting True (and False to other strategies)
@@ -13,7 +13,7 @@ strategies:
 
 ## parameters for strategies
 ta_summary:
-  quantity: 10 #type=int, min=1, quantity of each open position
+  quantity: 100 #type=int, min=1, quantity of each open position
   leverage: 10 #type=int, min=1, max=100
   takeprofit: 0.02 #type=float, price to reach above (for long) or below (for short) entry price to take profit, 0.2 means take profit 20% above or below entry price 
   stoploss: 0.02 #type=float, price to reach below (for long) or above (for short) entry price to stop loss, 0.1 means stop loss 10% below or above entry price
