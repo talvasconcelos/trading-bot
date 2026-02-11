@@ -39,6 +39,13 @@ class Strategy:
         """
         raise NotImplementedError
 
+    def precompute(self, df: pd.DataFrame):
+        """
+        Optional hook to precompute any needed series from the entire DataFrame
+        before the backtest loop starts. Called once after data is loaded.
+        """
+        pass
+
 # --- MACrossover Strategy ---
 class MACrossover(Strategy):
     def __init__(self, fast_period=50, slow_period=200, min_separation=0.005):
@@ -58,6 +65,83 @@ class MACrossover(Strategy):
             return -1
         else:
             return 0
+
+class TBD3Level(Strategy):
+    """Trade By Design 3-Level Reversal Strategy with MTF bias."""
+    def __init__(
+        self,
+        bias_tf='4h',
+        bias_ema=50,
+        fast=9,
+        mid=21,
+        slow=50,
+        volume_mult=1.5,
+        retracement_min=0.0,
+        require_three_hits=False,
+        rr_ratio=3.0,
+        min_separation=0.0,
+        atr_period=14
+    ):
+        self.bias_tf = bias_tf
+        self.bias_ema = bias_ema
+        self.fast = fast
+        self.mid = mid
+        self.slow = slow
+        self.volume_mult = volume_mult
+        self.retracement_min = retracement_min
+        self.require_three_hits = require_three_hits
+        self.rr_ratio = rr_ratio
+        self.min_sep = min_separation
+        self.atr_period = atr_period
+
+    def compute_signal(self, df_window):
+        if len(df_window) < max(self.slow, self.atr_period):
+            return 0
+        close = df_window['close'].iloc[-1]
+        try:
+            biased = df_window['close'].resample(self.bias_tf).last()
+            if biased.empty:
+                bias = 0
+            else:
+                ema_bias = biased.ewm(span=self.bias_ema, adjust=False).mean().iloc[-1]
+                price_bias = biased.iloc[-1]
+                if price_bias > ema_bias:
+                    bias = 1
+                elif price_bias < ema_bias:
+                    bias = -1
+                else:
+                    bias = 0
+        except Exception:
+            bias = 0
+
+        ema_fast = df_window['close'].rolling(self.fast).mean().iloc[-1]
+        ema_mid = df_window['close'].rolling(self.mid).mean().iloc[-1]
+        ema_slow = df_window['close'].rolling(self.slow).mean().iloc[-1]
+        ma_align_long = (ema_fast > ema_mid) and (ema_mid > ema_slow)
+        ma_align_short = (ema_fast < ema_mid) and (ema_mid < ema_slow)
+
+        vol_avg = df_window['volume'].rolling(20).mean().iloc[-1]
+        vol_last = df_window['volume'].iloc[-1]
+        vol_ok = vol_last > self.volume_mult * vol_avg
+
+        recent_high = df_window['high'].iloc[-20:].max()
+        recent_low = df_window['low'].iloc[-20:].min()
+        price_range = recent_high - recent_low
+        if price_range == 0:
+            retrace_ok = True
+        else:
+            if bias == 1:
+                retrace_ok = (close - recent_low) / price_range >= self.retracement_min
+            else:
+                retrace_ok = (recent_high - close) / price_range >= self.retracement_min
+
+        sep = (ema_fast - ema_slow) / ema_slow if ema_slow != 0 else 0
+
+        if bias != -1 and ma_align_long and vol_ok and retrace_ok and (sep >= self.min_sep):
+            return 1
+        if bias != 1 and ma_align_short and vol_ok and retrace_ok and (sep <= -self.min_sep):
+            return -1
+        return 0
 
 # --- Backtester ---
 class Backtester:
@@ -189,22 +273,41 @@ def ensure_output_dir():
 
 def main():
     parser = argparse.ArgumentParser(description='Generic backtest runner.')
-    parser.add_argument('--strategy', required=True, choices=['macrossover'], help='Strategy to test')
+    parser.add_argument('--strategy', required=True, choices=['macrossover', 'tbd3level'], help='Strategy to test')
     parser.add_argument('--start', required=True, help='Start date, e.g., 2024-01-01')
     parser.add_argument('--end', default=None, help='End date, e.g., 2024-12-31 (default: today)')
     parser.add_argument('--timeframe', default='1h', help='Data timeframe (1h, 4h, 1d, etc.)')
-    parser.add_argument('--fast', type=int, default=50, help='Fast MA period for MACrossover')
-    parser.add_argument('--slow', type=int, default=200, help='Slow MA period for MACrossover')
-    parser.add_argument('--min-sep', type=float, default=0.005, help='Minimum separation ratio (0.005=0.5%)')
+    parser.add_argument('--fast', type=int, default=9, help='Fast MA period')
+    parser.add_argument('--mid', type=int, default=21, help='Mid MA period')
+    parser.add_argument('--slow', type=int, default=50, help='Slow MA period')
+    parser.add_argument('--min-sep', type=float, default=0.0, help='Minimum separation ratio (0.005=0.5%)')
     parser.add_argument('--data', default=None, help='Path to a CSV file with OHLCV data (optional)')
     parser.add_argument('--capital', type=float, default=10000.0, help='Initial capital')
     parser.add_argument('--commission', type=float, default=0.001, help='Commission rate (e.g., 0.001 for 0.1%)')
     parser.add_argument('--plot', action='store_true', help='Generate equity curve plot')
+    # TBD3Level specific
+    parser.add_argument('--bias-tf', default='4h', help='Bias timeframe for MTF filter (e.g., 4h, 1d)')
+    parser.add_argument('--ema-bias', type=int, default=50, help='EMA period for bias')
+    parser.add_argument('--volume-mult', type=float, default=1.5, help='Volume multiplier for confirmation')
+    parser.add_argument('--retracement-min', type=float, default=0.0, help='Minimum retracement ratio (0-1)')
+    parser.add_argument('--three-hits', action='store_true', help='Require three tests of swing level')
+    parser.add_argument('--rr-ratio', type=float, default=3.0, help='Risk:Reward ratio')
+    parser.add_argument('--atr-period', type=int, default=14, help='ATR period for stop buffering')
     args = parser.parse_args()
 
     # Load data
     if args.data:
-        df = pd.read_csv(args.data, parse_dates=['timestamp'], index_col='timestamp')
+        df = pd.read_csv(args.data)
+        # Determine datetime column
+        if 'timestamp' in df.columns:
+            dt_col = 'timestamp'
+        elif 'date' in df.columns:
+            dt_col = 'date'
+        else:
+            # Use first column as datetime
+            dt_col = df.columns[0]
+        df[dt_col] = pd.to_datetime(df[dt_col])
+        df.set_index(dt_col, inplace=True)
         if not isinstance(df.index, pd.DatetimeIndex):
             raise ValueError("DataFrame must have a DatetimeIndex")
     else:
@@ -214,28 +317,44 @@ def main():
     # Instantiate strategy
     if args.strategy == 'macrossover':
         strategy = MACrossover(fast_period=args.fast, slow_period=args.slow, min_separation=args.min_sep)
+    elif args.strategy == 'tbd3level':
+        strategy = TBD3Level(
+            bias_tf=args.bias_tf,
+            bias_ema=args.ema_bias,
+            fast=args.fast,
+            mid=args.mid if hasattr(args, 'mid') else 21,
+            slow=args.slow,
+            volume_mult=args.volume_mult,
+            retracement_min=args.retracement_min,
+            require_three_hits=args.three_hits,
+            rr_ratio=args.rr_ratio,
+            min_separation=args.min_sep,
+            atr_period=args.atr_period
+        )
     else:
         raise ValueError(f"Unknown strategy: {args.strategy}")
 
+    # Precompute any strategy-specific series (e.g., multi-timeframe bias)
+    if hasattr(strategy, 'precompute'):
+        strategy.precompute(df)
+
     # Run backtest
     bt = Backtester(initial_capital=args.capital, commission=args.commission)
-    print("Running backtest...")
     results_df, metrics = bt.run(df, strategy)
 
-    # Print metrics
-    print("\n" + "="*50)
-    print("BACKTEST RESULTS")
-    print("="*50)
+    # Print metrics as a table
+    print()
+    print("| Metric | Value |")
+    print("|--------|-------|")
     for k, v in metrics.items():
-        print(f"{k}: {v}")
-    print("="*50 + "\n")
+        print(f"| {k} | {v} |")
 
-    # Save results
+    # Save results (silently)
     out_dir = ensure_output_dir()
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     equity_path = os.path.join(out_dir, f"equity_{timestamp}.csv")
     results_df.to_csv(equity_path)
-    print(f"Equity curve saved to: {equity_path}")
+    # print(f"Equity curve saved to: {equity_path}")
 
     if args.plot:
         plt.figure(figsize=(12,6))
@@ -248,7 +367,7 @@ def main():
         plot_path = os.path.join(out_dir, f"plot_{timestamp}.png")
         plt.savefig(plot_path, dpi=150, bbox_inches='tight')
         plt.close()
-        print(f"Plot saved to: {plot_path}")
+        # print(f"Plot saved to: {plot_path}")
 
 if __name__ == "__main__":
     main()
