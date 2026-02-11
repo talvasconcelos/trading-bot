@@ -51,6 +51,11 @@ Thumbs.db
 *.csv
 *.json
 
+# Backtest output
+*.png
+backtest_results/
+plots/
+
 # Logs
 *.log
 logs/
