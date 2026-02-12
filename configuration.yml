@@ -7,6 +7,8 @@ lnm_credentials:
 
 ## choose your strategy while affecting True (and False to other strategies)
 strategies:
+  # MACD + StochRSI crossover strategy
+  macd_stochrsi: False
   #Trading strat based on TA Summary: https://www.tradingview.com/symbols/XBTUSD/technicals/
   ta_summary: False
   # MA Crossover 50/200 strategy
@@ -14,6 +16,25 @@ strategies:
   
 
 ## parameters for strategies
+macd_stochrsi:
+  quantity: 10 #type=int, min=1, quantity (in USD) of each open position
+  leverage: 10 #type=int, min=1, max=100
+  takeprofit: 0.02 #type=float, price to reach above (for long) or below (for short) entry price to take profit
+  stoploss: 0.02 #type=float, price to reach below (for long) or above entry price to stop loss
+  interval: '1h' #type=string, one of: "1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d"
+  timeout: 60 #type=int, min=1, number of minutes the trading strategy will be running
+  symbol: 'BTC/USDT' #data source symbol for indicator candles
+  lookback: 300 #number of candles fetched each cycle
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  rsi_period: 14
+  stoch_period: 14
+  stoch_smooth_k: 3
+  stoch_smooth_d: 3
+  stoch_oversold: 40
+  stoch_overbought: 60
+
 ta_summary:
   quantity: 10 #type=int, min=1, quantity of each open position
   leverage: 10 #type=int, min=1, max=100
@@ -29,3 +50,8 @@ ma_crossover_50_200:
   stoploss: 0.02 #type=float, price to reach below (for long) or above (for short) entry price to stop loss
   interval: '1h' #type=string, interval for checking signals: "1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d"
   timeout: 60 #type=int, min=1, number of minutes the trading strategy will be running
+  symbol: 'BTC/USDT' #data source symbol for indicator candles
+  lookback: 300 #number of candles fetched each cycle
+  fast: 50
+  slow: 200
+  min_separation: 0.0

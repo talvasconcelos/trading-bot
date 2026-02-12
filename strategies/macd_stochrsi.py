@@ -7,7 +7,7 @@ import ccxt
 import pandas as pd
 
 from lnm_client import lnm_client
-from strategies.signals.ma_crossover_50_200 import latest_signal
+from strategies.signals.macd_stochrsi import latest_signal
 
 
 INTERVAL_TO_SECONDS = {
@@ -52,7 +52,7 @@ def process_short(self, quantity, leverage, takeprofit, stoploss, id_list):
     id_list.append(operation_id)
 
 
-class MACrossover:
+class MACDStochRSILive:
     def __init__(self, options):
         self.options = options
         self.lnm = lnm_client(options)
@@ -67,20 +67,41 @@ class MACrossover:
         candles = self.exchange.fetch_ohlcv(symbol=symbol, timeframe=interval, limit=lookback)
         if not candles:
             return pd.Series(dtype=float)
+
         df = pd.DataFrame(candles, columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
         return pd.to_numeric(df["Close"], errors="coerce").dropna()
 
-    def get_signal(self, symbol: str, interval: str, lookback: int, fast: int, slow: int, min_separation: float) -> str:
+    def get_signal(
+        self,
+        symbol: str,
+        interval: str,
+        lookback: int,
+        macd_fast: int,
+        macd_slow: int,
+        macd_signal: int,
+        rsi_period: int,
+        stoch_period: int,
+        stoch_smooth_k: int,
+        stoch_smooth_d: int,
+        stoch_oversold: float,
+        stoch_overbought: float,
+    ) -> str:
         try:
             close_prices = self._fetch_close_prices(symbol=symbol, interval=interval, lookback=lookback)
             return latest_signal(
                 close_prices,
-                fast=fast,
-                slow=slow,
-                min_separation=min_separation,
+                macd_fast=macd_fast,
+                macd_slow=macd_slow,
+                macd_signal=macd_signal,
+                rsi_period=rsi_period,
+                stoch_period=stoch_period,
+                stoch_smooth_k=stoch_smooth_k,
+                stoch_smooth_d=stoch_smooth_d,
+                stoch_oversold=stoch_oversold,
+                stoch_overbought=stoch_overbought,
             )
         except Exception as exc:
-            logging.error(f"MA crossover signal failed: {exc}")
+            logging.error(f"Signal calculation failed: {exc}")
             return "neutral"
 
     def run(
@@ -93,9 +114,15 @@ class MACrossover:
         timeout,
         symbol="BTC/USDT",
         lookback=300,
-        fast=50,
-        slow=200,
-        min_separation=0.0,
+        macd_fast=12,
+        macd_slow=26,
+        macd_signal=9,
+        rsi_period=14,
+        stoch_period=14,
+        stoch_smooth_k=3,
+        stoch_smooth_d=3,
+        stoch_oversold=40.0,
+        stoch_overbought=60.0,
     ):
         if interval not in INTERVAL_TO_SECONDS:
             raise ValueError(f"Unsupported interval '{interval}'.")
@@ -108,11 +135,17 @@ class MACrossover:
             symbol=symbol,
             interval=interval,
             lookback=lookback,
-            fast=fast,
-            slow=slow,
-            min_separation=min_separation,
+            macd_fast=macd_fast,
+            macd_slow=macd_slow,
+            macd_signal=macd_signal,
+            rsi_period=rsi_period,
+            stoch_period=stoch_period,
+            stoch_smooth_k=stoch_smooth_k,
+            stoch_smooth_d=stoch_smooth_d,
+            stoch_oversold=stoch_oversold,
+            stoch_overbought=stoch_overbought,
         )
-        logging.info(f"Initial MA crossover signal: {side}")
+        logging.info(f"Initial MACD+StochRSI signal: {side}")
 
         if side == "long":
             process_long(self, quantity, leverage, takeprofit, stoploss, id_list)
@@ -128,11 +161,17 @@ class MACrossover:
                 symbol=symbol,
                 interval=interval,
                 lookback=lookback,
-                fast=fast,
-                slow=slow,
-                min_separation=min_separation,
+                macd_fast=macd_fast,
+                macd_slow=macd_slow,
+                macd_signal=macd_signal,
+                rsi_period=rsi_period,
+                stoch_period=stoch_period,
+                stoch_smooth_k=stoch_smooth_k,
+                stoch_smooth_d=stoch_smooth_d,
+                stoch_oversold=stoch_oversold,
+                stoch_overbought=stoch_overbought,
             )
-            logging.info(f"Current MA crossover signal: {signal}")
+            logging.info(f"Current MACD+StochRSI signal: {signal}")
 
             num_pos_running = len(json.loads(self.lnm.get_trades(type_trade="running")))
             id_running = [

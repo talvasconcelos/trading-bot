@@ -49,7 +49,74 @@ You can also add the parameter network with 'testnet' for [LN Markets Testnet](h
 
 Current available strategies are:
 - ta_summary: use the [Trading View Technical Analysis](https://www.tradingview.com/symbols/XBTUSD/technicals/) summary indicator based on 27 signals (oscillators and moving averages) to open a long or short future position.
+- macd_stochrsi: MACD crossover confirmed by StochRSI crossover in oversold/overbought zones.
 - More to come
+
+## Backtesting
+
+Use `backtest.py` to run historical tests from a CSV file with OHLCV columns.
+
+### Required CSV format
+- Required columns: `Open`, `High`, `Low`, `Close`
+- Optional columns: `Volume`, one date column among `timestamp`, `date`, `datetime`, `time`, `open_time`
+- Column names are case-insensitive.
+
+### Example command
+```bash
+uv run python backtest.py \
+  --data data/2023-2025-ohlcv_1h.csv \
+  --strategy strategies.backtests.ma_crossover_50_200:MACrossover50200 \
+  --cash 10000 \
+  --commission 0.0005 \
+  --leverage 2 \
+  --param fast=50 \
+  --param slow=200 \
+  --export-trades trades.csv
+```
+
+Add `--plot` to open the backtest chart.
+By default the runner uses fractional sizing (`FractionalBacktest`), which is usually better for BTC/USD. Use `--no-fractional` to disable it.
+
+### MACD + StochRSI backtest example
+```bash
+uv run python backtest.py \
+  --data data/2023-2025-ohlcv_1h.csv \
+  --strategy strategies.backtests.macd_stochrsi:MACDStochRSI \
+  --cash 10000 \
+  --commission 0.0005 \
+  --leverage 2 \
+  --param macd_fast=12 \
+  --param macd_slow=26 \
+  --param macd_signal=9 \
+  --param rsi_period=14 \
+  --param stoch_period=14 \
+  --param stoch_smooth_k=3 \
+  --param stoch_smooth_d=3 \
+  --param stoch_oversold=40 \
+  --param stoch_overbought=60 \
+  --export-trades trades_macd_stochrsi.csv
+```
+
+### Where to put strategies (no logic duplication)
+- Shared indicator/signal logic: `strategies/signals/`
+- Backtest wrapper classes: `strategies/backtests/`
+- Live LN Markets execution classes: `strategies/`
+
+Keep the indicator logic in `strategies/signals/*` and call it from both wrappers, so you only maintain one trading rule implementation.
+
+### Adding new backtest strategies
+Create a class that inherits from `backtesting.Strategy`, then pass it with `--strategy module.path:ClassName`.
+
+```python
+from backtesting import Strategy
+
+class MyStrategy(Strategy):
+    def init(self):
+        ...
+
+    def next(self):
+        ...
+```
 
 More details below.
 
