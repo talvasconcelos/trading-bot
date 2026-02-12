@@ -7,6 +7,12 @@ lnm_credentials:
 
 ## choose your strategy while affecting True (and False to other strategies)
 strategies:
+  # Trend rider with exhaustion exits and trailing logic
+  trend_exhaustion_rider: False
+  # MA7/21/50 + RSI + StochRSI pre-signal strategy
+  ma7_rsi_stoch: False
+  # TBD 3-level reversal strategy (W/M + exhaustion + MTF bias)
+  tbd_3_level: False
   # MACD + StochRSI crossover strategy
   macd_stochrsi: False
   #Trading strat based on TA Summary: https://www.tradingview.com/symbols/XBTUSD/technicals/
@@ -16,6 +22,88 @@ strategies:
   
 
 ## parameters for strategies
+trend_exhaustion_rider:
+  quantity: 10
+  leverage: 10 # can be increased up to 20 based on risk tolerance
+  profile: 'balanced' # conservative | balanced | aggressive
+  takeprofit: 0.08 # exchange-side fail-safe TP
+  stoploss: 0.015 # exchange-side fail-safe SL
+  interval: '1h'
+  timeout: 60
+  symbol: 'BTC/USDT'
+  lookback: 500
+  # Optional manual overrides for profile defaults:
+  # fast_ema:
+  # slow_ema:
+  # breakout_lookback:
+  # atr_period:
+  # volume_mult:
+  # rsi_period:
+  # rsi_exit_long:
+  # rsi_exit_short:
+  # htf_bias_tf:
+  # htf_ema_period:
+  # min_target_pct:
+  # trail_pct:
+
+ma7_rsi_stoch:
+  quantity: 10
+  leverage: 10 # keep lower until validated on paper
+  profile: 'balanced' # long_only_safe | balanced | with_shorts
+  takeprofit: 0.08 # fail-safe TP
+  stoploss: 0.015 # fail-safe SL
+  interval: '4h' # try 4h first for smoother signals
+  timeout: 60
+  symbol: 'BTC/USDT'
+  lookback: 500
+  # Optional manual overrides for profile defaults:
+  # ma_fast:
+  # ma_mid:
+  # ma_slow:
+  # rsi_period:
+  # rsi_smooth:
+  # stoch_len:
+  # stoch_smooth_k:
+  # stoch_smooth_d:
+  # rsi_entry_floor:
+  # rsi_confirm:
+  # allow_shorts:
+  # use_trend_filter:
+  # min_target_pct:
+  # trail_pct:
+
+tbd_3_level:
+  quantity: 10 #type=int, min=1, quantity (in USD) of each open position
+  leverage: 10 #type=int, min=1, max=100
+  takeprofit: 0.03 #type=float
+  stoploss: 0.01 #type=float
+  interval: '4h' #type=string, primary structure timeframe
+  timeout: 60 #type=int, minutes the strategy will run
+  symbol: 'BTC/USDT' #data source symbol for indicator candles
+  lookback: 500
+  ema_fast: 9
+  ema_mid: 21
+  ema_slow: 50
+  htf_bias_tf: '1D'
+  htf_bias_ema: 50
+  atr_period: 14
+  vector_vol_multiplier: 1.5
+  breakout_vol_multiplier: 1.0
+  wick_sweep_multiplier: 1.0
+  level_lookback: 42
+  level_tolerance: 0.0025
+  formation_max_gap: 20
+  formation_confirm_bars: 6
+  higher_low_threshold: 0.001
+  lower_high_threshold: 0.001
+  exhaustion_lookback: 20
+  push_window: 4
+  require_weekend_consolidation: false
+  weekend_consolidation_lookback: 18
+  weekend_consolidation_atr_mult: 1.5
+  session_start_hour: 8 # tuned on local dataset
+  session_end_hour: 18
+
 macd_stochrsi:
   quantity: 10 #type=int, min=1, quantity (in USD) of each open position
   leverage: 10 #type=int, min=1, max=100

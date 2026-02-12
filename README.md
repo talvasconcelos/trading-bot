@@ -50,6 +50,9 @@ You can also add the parameter network with 'testnet' for [LN Markets Testnet](h
 Current available strategies are:
 - ta_summary: use the [Trading View Technical Analysis](https://www.tradingview.com/symbols/XBTUSD/technicals/) summary indicator based on 27 signals (oscillators and moving averages) to open a long or short future position.
 - macd_stochrsi: MACD crossover confirmed by StochRSI crossover in oversold/overbought zones.
+- tbd_3_level: approximation of the Trade By Design 3-level reversal concept (W/M structure + 3-push exhaustion + MTF EMA bias + liquidity filters).
+- trend_exhaustion_rider: trend breakout rider with long/short entries, exhaustion exits, and trailing-style profit protection after a minimum target move.
+- ma7_rsi_stoch: MA 7/21/50 with RSI + StochRSI pre-signal logic, optional long-only mode, and trailing exit after minimum move.
 - More to come
 
 ## Backtesting
@@ -96,6 +99,67 @@ uv run python backtest.py \
   --param stoch_overbought=60 \
   --export-trades trades_macd_stochrsi.csv
 ```
+
+### TBD 3-level backtest example
+```bash
+uv run python backtest.py \
+  --data data/2023-2025-ohlcv_1h.csv \
+  --strategy strategies.backtests.tbd_3_level:TBDThreeLevel \
+  --cash 10000 \
+  --commission 0.0005 \
+  --leverage 2 \
+  --param htf_bias_tf=1D \
+  --param require_weekend_consolidation=false \
+  --param rr_ratio=2.5 \
+  --param sl_atr_mult=1.2 \
+  --export-trades trades_tbd_3_level.csv
+```
+
+Note: this is a public-information approximation of the TBD concept, not the proprietary paid indicator suite.
+
+### Trend Exhaustion Rider backtest example
+```bash
+uv run python backtest.py \
+  --data data/2023-2025-ohlcv_1h.csv \
+  --strategy strategies.backtests.trend_exhaustion_rider:TrendExhaustionRider \
+  --cash 10000 \
+  --commission 0.0005 \
+  --leverage 2 \
+  --param fast_ema=50 \
+  --param slow_ema=200 \
+  --param breakout_lookback=160 \
+  --param htf_bias_tf=1D \
+  --param htf_ema_period=200 \
+  --param sl_atr_mult=2.0 \
+  --param min_target_pct=0.025 \
+  --param trail_pct=0.015 \
+  --export-trades trades_trend_exhaustion_rider.csv
+```
+
+`trend_exhaustion_rider` supports strategy profiles via `--param profile=conservative|balanced|aggressive`.
+
+### MA7 RSI Stoch backtest example
+```bash
+uv run python backtest.py \
+  --data data/2023-2025-ohlcv_1h.csv \
+  --strategy strategies.backtests.ma7_rsi_stoch:MA7RSIStoch \
+  --cash 10000 \
+  --commission 0.0005 \
+  --leverage 2 \
+  --param rsi_smooth=7 \
+  --param stoch_len=21 \
+  --param stoch_smooth_k=7 \
+  --param stoch_smooth_d=7 \
+  --param rsi_entry_floor=45 \
+  --param rsi_confirm=58 \
+  --param allow_shorts=false \
+  --param min_target_pct=0.04 \
+  --param trail_pct=0.015 \
+  --param hard_stop_pct=0.02 \
+  --export-trades trades_ma7_rsi_stoch.csv
+```
+
+`ma7_rsi_stoch` supports strategy profiles via `--param profile=long_only_safe|balanced|with_shorts`.
 
 ### Where to put strategies (no logic duplication)
 - Shared indicator/signal logic: `strategies/signals/`
