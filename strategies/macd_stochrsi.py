@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from time import sleep, time
@@ -23,31 +22,27 @@ INTERVAL_TO_SECONDS = {
 
 
 def process_long(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())["lastPrice"]
+    last = self.lnm.get_last_price()
     tp = round(last * (1 + takeprofit))
     sl = round(last * (1 - stoploss))
-    operation_id = json.loads(
-        self.lnm.market_long(
-            quantity=quantity,
-            leverage=leverage,
-            takeprofit=tp,
-            stoploss=sl,
-        )
+    operation_id = self.lnm.market_long(
+        quantity=quantity,
+        leverage=leverage,
+        takeprofit=tp,
+        stoploss=sl,
     )["id"]
     id_list.append(operation_id)
 
 
 def process_short(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())["lastPrice"]
+    last = self.lnm.get_last_price()
     tp = round(last * (1 - takeprofit))
     sl = round(last * (1 + stoploss))
-    operation_id = json.loads(
-        self.lnm.market_short(
-            quantity=quantity,
-            leverage=leverage,
-            takeprofit=tp,
-            stoploss=sl,
-        )
+    operation_id = self.lnm.market_short(
+        quantity=quantity,
+        leverage=leverage,
+        takeprofit=tp,
+        stoploss=sl,
     )["id"]
     id_list.append(operation_id)
 
@@ -173,11 +168,8 @@ class MACDStochRSILive:
             )
             logging.info(f"Current MACD+StochRSI signal: {signal}")
 
-            num_pos_running = len(json.loads(self.lnm.get_trades(type_trade="running")))
-            id_running = [
-                json.loads(self.lnm.get_trades(type_trade="running"))[i]["id"]
-                for i in range(num_pos_running)
-            ]
+            running_positions = self.lnm.get_trades(type_trade="running")
+            id_running = [p["id"] for p in running_positions]
 
             if len(id_running) > 0 and len(id_list) > 0:
                 for operation_id in id_list[:]:
@@ -223,7 +215,7 @@ class MACDStochRSILive:
         for operation_id in id_list[:]:
             self.process_close(operation_id, id_list)
 
-        closed_positions = json.loads(self.lnm.get_trades(type_trade="closed"))
+        closed_positions = self.lnm.get_trades(type_trade="closed")
         df_closed_positions = pd.DataFrame.from_dict(closed_positions)
         df_closed_pos = df_closed_positions[df_closed_positions["id"].isin(closed_ids)].copy()
 

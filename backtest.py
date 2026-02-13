@@ -1,11 +1,11 @@
 import argparse
 import importlib
+import re
 from pathlib import Path
 
 import pandas as pd
 from backtesting import Backtest, Strategy
 from backtesting.lib import FractionalBacktest
-
 
 DATE_COLUMNS = ("timestamp", "date", "datetime", "time", "open_time")
 OHLCV_ALIASES = {
@@ -63,7 +63,9 @@ def load_ohlcv(csv_path: Path) -> pd.DataFrame:
 
     lower_to_original = {col.lower(): col for col in df.columns}
 
-    date_col = next((lower_to_original[c] for c in DATE_COLUMNS if c in lower_to_original), None)
+    date_col = next(
+        (lower_to_original[c] for c in DATE_COLUMNS if c in lower_to_original), None
+    )
     if date_col is not None:
         df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
         df = df.dropna(subset=[date_col]).set_index(date_col)
@@ -95,8 +97,12 @@ def load_ohlcv(csv_path: Path) -> pd.DataFrame:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run backtests for Strategy subclasses.")
-    parser.add_argument("--data", required=True, help="Path to CSV file containing OHLCV candles.")
+    parser = argparse.ArgumentParser(
+        description="Run backtests for Strategy subclasses."
+    )
+    parser.add_argument(
+        "--data", required=True, help="Path to CSV file containing OHLCV candles."
+    )
     parser.add_argument(
         "--strategy",
         required=True,
@@ -105,11 +111,26 @@ def main():
             "strategies.backtests.ma_crossover_50_200:MACrossover50200"
         ),
     )
-    parser.add_argument("--cash", type=float, default=10_000, help="Starting cash (quote currency).")
-    parser.add_argument("--commission", type=float, default=0.0005, help="Per-trade commission.")
-    parser.add_argument("--leverage", type=float, default=1.0, help="Account leverage. 1.0 disables margin.")
-    parser.add_argument("--hedging", action="store_true", help="Allow long and short positions at once.")
-    parser.add_argument("--trade-on-close", action="store_true", help="Fill market orders on candle close.")
+    parser.add_argument(
+        "--cash", type=float, default=10_000, help="Starting cash (quote currency)."
+    )
+    parser.add_argument(
+        "--commission", type=float, default=0.0005, help="Per-trade commission."
+    )
+    parser.add_argument(
+        "--leverage",
+        type=float,
+        default=1.0,
+        help="Account leverage. 1.0 disables margin.",
+    )
+    parser.add_argument(
+        "--hedging", action="store_true", help="Allow long and short positions at once."
+    )
+    parser.add_argument(
+        "--trade-on-close",
+        action="store_true",
+        help="Fill market orders on candle close.",
+    )
     parser.add_argument(
         "--no-fractional",
         action="store_true",
@@ -121,8 +142,17 @@ def main():
         default=[],
         help="Strategy parameter in key=value format. Can be passed multiple times.",
     )
-    parser.add_argument("--plot", action="store_true", help="Render interactive backtest chart.")
-    parser.add_argument("--export-trades", help="Optional CSV path to write executed trades.")
+    parser.add_argument(
+        "--plot", action="store_true", help="Render interactive backtest chart."
+    )
+    parser.add_argument(
+        "--export-trades", help="Optional CSV path to write executed trades."
+    )
+    parser.add_argument(
+        "--artifacts-dir",
+        default="backtest_artifacts",
+        help="Directory where backtest artifacts (.html/.csv) are written.",
+    )
 
     args = parser.parse_args()
 
@@ -133,6 +163,8 @@ def main():
     strategy_cls = load_strategy(args.strategy)
     df = load_ohlcv(data_path)
     strategy_params = parse_params(args.param)
+    artifacts_dir = Path(args.artifacts_dir)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     margin = 1 / args.leverage if args.leverage > 0 else 1.0
     backtest_cls = Backtest if args.no_fractional else FractionalBacktest
@@ -194,11 +226,17 @@ def main():
 
     if args.export_trades:
         trades_path = Path(args.export_trades)
+        if not trades_path.is_absolute():
+            trades_path = artifacts_dir / trades_path
+        trades_path.parent.mkdir(parents=True, exist_ok=True)
         stats["_trades"].to_csv(trades_path, index=False)
         print(f"\nTrades exported to: {trades_path}")
 
     if args.plot:
-        bt.plot()
+        safe_strategy = re.sub(r"[^A-Za-z0-9_.-]+", "_", args.strategy)
+        plot_path = artifacts_dir / f"{safe_strategy}.html"
+        bt.plot(filename=str(plot_path), open_browser=False)
+        print(f"Plot exported to: {plot_path}")
 
 
 if __name__ == "__main__":

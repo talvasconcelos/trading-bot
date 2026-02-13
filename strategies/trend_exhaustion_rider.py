@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from time import sleep, time
@@ -7,8 +6,10 @@ import ccxt
 import pandas as pd
 
 from lnm_client import lnm_client
-from strategies.signals.trend_exhaustion_rider import resolve_profile, trend_exhaustion_signals
-
+from strategies.signals.trend_exhaustion_rider import (
+    resolve_profile,
+    trend_exhaustion_signals,
+)
 
 INTERVAL_TO_SECONDS = {
     "1m": 60,
@@ -23,31 +24,27 @@ INTERVAL_TO_SECONDS = {
 
 
 def process_long(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())["lastPrice"]
+    last = self.lnm.get_last_price()
     tp = round(last * (1 + takeprofit))
     sl = round(last * (1 - stoploss))
-    operation_id = json.loads(
-        self.lnm.market_long(
-            quantity=quantity,
-            leverage=leverage,
-            takeprofit=tp,
-            stoploss=sl,
-        )
+    operation_id = self.lnm.market_long(
+        quantity=quantity,
+        leverage=leverage,
+        takeprofit=tp,
+        stoploss=sl,
     )["id"]
     id_list.append(operation_id)
 
 
 def process_short(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())["lastPrice"]
+    last = self.lnm.get_last_price()
     tp = round(last * (1 - takeprofit))
     sl = round(last * (1 + stoploss))
-    operation_id = json.loads(
-        self.lnm.market_short(
-            quantity=quantity,
-            leverage=leverage,
-            takeprofit=tp,
-            stoploss=sl,
-        )
+    operation_id = self.lnm.market_short(
+        quantity=quantity,
+        leverage=leverage,
+        takeprofit=tp,
+        stoploss=sl,
     )["id"]
     id_list.append(operation_id)
 
@@ -68,16 +65,23 @@ class TrendExhaustionRiderLive:
             id_list.remove(operation_id)
 
     def _fetch_ohlcv(self, symbol: str, interval: str, lookback: int) -> pd.DataFrame:
-        candles = self.exchange.fetch_ohlcv(symbol=symbol, timeframe=interval, limit=lookback)
+        logging.info(f"Fetching {lookback} {interval} candles for {symbol}")
+        candles = self.exchange.fetch_ohlcv(
+            symbol=symbol, timeframe=interval, limit=lookback
+        )
         if not candles:
             return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
 
-        df = pd.DataFrame(candles, columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
+        df = pd.DataFrame(
+            candles, columns=["timestamp", "Open", "High", "Low", "Close", "Volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         return df.set_index("timestamp")
 
     def _get_signal_pack(self, ohlcv_df: pd.DataFrame, **kwargs):
-        long_entry, short_entry, long_exhaust, short_exhaust, *_ = trend_exhaustion_signals(ohlcv_df, **kwargs)
+        long_entry, short_entry, long_exhaust, short_exhaust, *_ = (
+            trend_exhaustion_signals(ohlcv_df, **kwargs)
+        )
         if len(long_entry) == 0:
             return "neutral", False
         if long_entry[-1] == 1:
@@ -95,6 +99,14 @@ class TrendExhaustionRiderLive:
         self.peak_price = None
         self.trough_price = None
         self.trailing_active = False
+
+    @staticmethod
+    def _seconds_to_next_candle(interval_seconds: int) -> float:
+        now = time()
+        remaining = interval_seconds - (now % interval_seconds)
+        if remaining < 1.0:
+            return float(interval_seconds)
+        return remaining
 
     def run(
         self,
@@ -119,6 +131,7 @@ class TrendExhaustionRiderLive:
         htf_ema_period=None,
         min_target_pct=None,
         trail_pct=None,
+        sync_to_candle_close=True,
     ):
         if interval not in INTERVAL_TO_SECONDS:
             raise ValueError(f"Unsupported interval '{interval}'.")
@@ -126,18 +139,30 @@ class TrendExhaustionRiderLive:
         profile_cfg = resolve_profile(profile)
         fast_ema = profile_cfg["fast_ema"] if fast_ema is None else fast_ema
         slow_ema = profile_cfg["slow_ema"] if slow_ema is None else slow_ema
-        breakout_lookback = profile_cfg["breakout_lookback"] if breakout_lookback is None else breakout_lookback
+        breakout_lookback = (
+            profile_cfg["breakout_lookback"]
+            if breakout_lookback is None
+            else breakout_lookback
+        )
         atr_period = profile_cfg["atr_period"] if atr_period is None else atr_period
         volume_mult = profile_cfg["volume_mult"] if volume_mult is None else volume_mult
         rsi_period = profile_cfg["rsi_period"] if rsi_period is None else rsi_period
-        rsi_exit_long = profile_cfg["rsi_exit_long"] if rsi_exit_long is None else rsi_exit_long
-        rsi_exit_short = profile_cfg["rsi_exit_short"] if rsi_exit_short is None else rsi_exit_short
+        rsi_exit_long = (
+            profile_cfg["rsi_exit_long"] if rsi_exit_long is None else rsi_exit_long
+        )
+        rsi_exit_short = (
+            profile_cfg["rsi_exit_short"] if rsi_exit_short is None else rsi_exit_short
+        )
         htf_bias_tf = profile_cfg["htf_bias_tf"] if htf_bias_tf is None else htf_bias_tf
-        htf_ema_period = profile_cfg["htf_ema_period"] if htf_ema_period is None else htf_ema_period
-        min_target_pct = profile_cfg["min_target_pct"] if min_target_pct is None else min_target_pct
+        htf_ema_period = (
+            profile_cfg["htf_ema_period"] if htf_ema_period is None else htf_ema_period
+        )
+        min_target_pct = (
+            profile_cfg["min_target_pct"] if min_target_pct is None else min_target_pct
+        )
         trail_pct = profile_cfg["trail_pct"] if trail_pct is None else trail_pct
 
-        timeout_at = time() + 60 * timeout
+        timeout_at = None if timeout <= 0 else time() + 60 * timeout
         wait_seconds = INTERVAL_TO_SECONDS[interval]
         id_list = []
         side = "neutral"
@@ -155,26 +180,48 @@ class TrendExhaustionRiderLive:
             htf_ema_period=htf_ema_period,
         )
 
-        while True:
-            candles = self._fetch_ohlcv(symbol=symbol, interval=interval, lookback=lookback)
-            signal, exhausted = self._get_signal_pack(candles, **signal_kwargs)
-            last_price = json.loads(self.lnm.get_last())["lastPrice"]
+        if sync_to_candle_close:
+            sleep_for = self._seconds_to_next_candle(wait_seconds)
+            logging.info(
+                f"Waiting {sleep_for/60:.2f}min for next {interval} candle close"
+            )
+            sleep(sleep_for)
 
-            running_positions = json.loads(self.lnm.get_trades(type_trade="running"))
+        while True:
+            candles = self._fetch_ohlcv(
+                symbol=symbol, interval=interval, lookback=lookback
+            )
+            signal, exhausted = self._get_signal_pack(candles, **signal_kwargs)
+            last_price = self.lnm.get_last_price()
+
+            running_positions = self.lnm.get_trades(type_trade="running")
             id_running = [p["id"] for p in running_positions]
+            logging.info(
+                "Cycle | signal=%s exhausted=%s side=%s price=%.2f running=%d tracked=%d",
+                signal,
+                exhausted,
+                side,
+                last_price,
+                len(id_running),
+                len(id_list),
+            )
 
             if side == "long" and self.entry_price:
                 self.peak_price = max(self.peak_price or last_price, last_price)
                 if self.peak_price >= self.entry_price * (1 + min_target_pct):
                     self.trailing_active = True
-                if self.trailing_active and last_price <= self.peak_price * (1 - trail_pct):
+                if self.trailing_active and last_price <= self.peak_price * (
+                    1 - trail_pct
+                ):
                     exhausted = True
 
             if side == "short" and self.entry_price:
                 self.trough_price = min(self.trough_price or last_price, last_price)
                 if self.trough_price <= self.entry_price * (1 - min_target_pct):
                     self.trailing_active = True
-                if self.trailing_active and last_price >= self.trough_price * (1 + trail_pct):
+                if self.trailing_active and last_price >= self.trough_price * (
+                    1 + trail_pct
+                ):
                     exhausted = True
 
             if len(id_running) > 0 and len(id_list) > 0:
@@ -194,7 +241,9 @@ class TrendExhaustionRiderLive:
                     if side == "long" and signal == "short":
                         self.process_close(operation_id, id_list)
                         side = "short"
-                        process_short(self, quantity, leverage, takeprofit, stoploss, id_list)
+                        process_short(
+                            self, quantity, leverage, takeprofit, stoploss, id_list
+                        )
                         self.entry_price = last_price
                         self.peak_price = last_price
                         self.trough_price = last_price
@@ -202,7 +251,9 @@ class TrendExhaustionRiderLive:
                     elif side == "short" and signal == "long":
                         self.process_close(operation_id, id_list)
                         side = "long"
-                        process_long(self, quantity, leverage, takeprofit, stoploss, id_list)
+                        process_long(
+                            self, quantity, leverage, takeprofit, stoploss, id_list
+                        )
                         self.entry_price = last_price
                         self.peak_price = last_price
                         self.trough_price = last_price
@@ -210,14 +261,18 @@ class TrendExhaustionRiderLive:
             else:
                 if signal == "long":
                     side = "long"
-                    process_long(self, quantity, leverage, takeprofit, stoploss, id_list)
+                    process_long(
+                        self, quantity, leverage, takeprofit, stoploss, id_list
+                    )
                     self.entry_price = last_price
                     self.peak_price = last_price
                     self.trough_price = last_price
                     self.trailing_active = False
                 elif signal == "short":
                     side = "short"
-                    process_short(self, quantity, leverage, takeprofit, stoploss, id_list)
+                    process_short(
+                        self, quantity, leverage, takeprofit, stoploss, id_list
+                    )
                     self.entry_price = last_price
                     self.peak_price = last_price
                     self.trough_price = last_price
@@ -225,17 +280,23 @@ class TrendExhaustionRiderLive:
                 else:
                     side = "neutral"
 
-            if time() > timeout_at:
+            if timeout_at is not None and time() > timeout_at:
                 break
-            sleep(wait_seconds)
+            if sync_to_candle_close:
+                sleep_for = self._seconds_to_next_candle(wait_seconds)
+            else:
+                sleep_for = wait_seconds
+            sleep(sleep_for)
 
         closed_ids = id_list[:]
         for operation_id in id_list[:]:
             self.process_close(operation_id, id_list)
 
-        closed_positions = json.loads(self.lnm.get_trades(type_trade="closed"))
+        closed_positions = self.lnm.get_trades(type_trade="closed")
         df_closed_positions = pd.DataFrame.from_dict(closed_positions)
-        df_closed_pos = df_closed_positions[df_closed_positions["id"].isin(closed_ids)].copy()
+        df_closed_pos = df_closed_positions[
+            df_closed_positions["id"].isin(closed_ids)
+        ].copy()
 
         if not df_closed_pos.empty:
             pl = df_closed_pos["pl"].sum()

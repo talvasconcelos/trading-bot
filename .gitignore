@@ -48,13 +48,13 @@ wheels/
 Thumbs.db
 
 # Data files
-*.csv
 *.json
 
 # Backtest output
 *.png
 backtest_results/
 plots/
+backtest_artifacts/
 
 # Logs
 *.log

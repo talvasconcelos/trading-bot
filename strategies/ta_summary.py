@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from time import time, sleep
@@ -10,21 +9,22 @@ from lnm_client import lnm_client
 
 
 def process_long(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())['lastPrice']
+    last = self.lnm.get_last_price()
     tp = round(last * (1 + takeprofit))
     sl = round(last * (1 - stoploss))
-    # print(self.lnm.market_long(quantity=quantity, leverage=leverage, takeprofit=tp, stoploss=sl))
-    operation_id = json.loads(self.lnm.market_long(quantity=quantity, leverage=leverage, takeprofit=tp, stoploss=sl))[
-        'id']
+    operation_id = self.lnm.market_long(
+        quantity=quantity, leverage=leverage, takeprofit=tp, stoploss=sl
+    )["id"]
     id_list.append(operation_id)
 
 
 def process_short(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())['lastPrice']
+    last = self.lnm.get_last_price()
     tp = round(last * (1 - takeprofit))
     sl = round(last * (1 + stoploss))
-    operation_id = json.loads(self.lnm.market_short(quantity=quantity, leverage=leverage, takeprofit=tp, stoploss=sl))[
-        'id']
+    operation_id = self.lnm.market_short(
+        quantity=quantity, leverage=leverage, takeprofit=tp, stoploss=sl
+    )["id"]
     id_list.append(operation_id)
 
 
@@ -94,9 +94,8 @@ class TAS:
             analysis = TAS.get_ta(symbol, screener, exchange, interval)
             print(analysis)
 
-            num_pos_running = len(json.loads(self.lnm.get_trades(type_trade='running')))
-            id_running = [json.loads(self.lnm.get_trades(type_trade='running'))[i]['id'] for i in
-                          range(num_pos_running)]
+            running_positions = self.lnm.get_trades(type_trade="running")
+            id_running = [position["id"] for position in running_positions]
 
             if len(id_running) > 0 and len(id_list) > 0:  # If there are running positions and positions in the list
                 for id in id_list:  # For each position in the list of positions that have been opened by the bot
@@ -153,7 +152,7 @@ class TAS:
             self.process_close(operation_id, id_list)
             id_list.append(operation_id)
 
-        closed_positions = json.loads(self.lnm.get_trades(type_trade='closed'))
+        closed_positions = self.lnm.get_trades(type_trade="closed")
         df_closed_positions = pd.DataFrame.from_dict(closed_positions)
 
         df_closed_pos = df_closed_positions[df_closed_positions['id'].isin(id_list)].copy()

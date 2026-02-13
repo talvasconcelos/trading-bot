@@ -25,8 +25,8 @@ uv run python main.py
 ```
 pip install -r requirements.txt
 ```
-This code works with LN Markets Python module >= 2.0.1, released for with LN Markets API V2.
-You can upgrade your local version running pip install ln-markets==2.0.1.
+This code uses the LN Markets Python SDK v3 (`lnmarkets-sdk`), compatible with LN Markets API v3.
+Install/update it with `pip install -U lnmarkets-sdk`.
 
 ## Authentication
 
@@ -108,6 +108,7 @@ uv run python backtest.py \
   --cash 10000 \
   --commission 0.0005 \
   --leverage 2 \
+  --plot \
   --param htf_bias_tf=1D \
   --param require_weekend_consolidation=false \
   --param rr_ratio=2.5 \
@@ -125,6 +126,8 @@ uv run python backtest.py \
   --cash 10000 \
   --commission 0.0005 \
   --leverage 2 \
+  --plot \
+  --param profile=balanced \
   --param fast_ema=50 \
   --param slow_ema=200 \
   --param breakout_lookback=160 \
@@ -146,6 +149,7 @@ uv run python backtest.py \
   --cash 10000 \
   --commission 0.0005 \
   --leverage 2 \
+  --plot \
   --param rsi_smooth=7 \
   --param stoch_len=21 \
   --param stoch_smooth_k=7 \

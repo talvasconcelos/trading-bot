@@ -1,4 +1,4 @@
-ln-markets >= 2.0.1
+lnmarkets-sdk @ git+https://github.com/ln-markets/sdk-python.git@main
 pyaml >= 6.0
 tradingview_ta >= 3.2.9
 pandas >= 1.4.2

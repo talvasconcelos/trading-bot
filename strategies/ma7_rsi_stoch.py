@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from time import sleep, time
@@ -24,31 +23,27 @@ INTERVAL_TO_SECONDS = {
 
 
 def process_long(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())["lastPrice"]
+    last = self.lnm.get_last_price()
     tp = round(last * (1 + takeprofit))
     sl = round(last * (1 - stoploss))
-    operation_id = json.loads(
-        self.lnm.market_long(
-            quantity=quantity,
-            leverage=leverage,
-            takeprofit=tp,
-            stoploss=sl,
-        )
+    operation_id = self.lnm.market_long(
+        quantity=quantity,
+        leverage=leverage,
+        takeprofit=tp,
+        stoploss=sl,
     )["id"]
     id_list.append(operation_id)
 
 
 def process_short(self, quantity, leverage, takeprofit, stoploss, id_list):
-    last = json.loads(self.lnm.get_last())["lastPrice"]
+    last = self.lnm.get_last_price()
     tp = round(last * (1 - takeprofit))
     sl = round(last * (1 + stoploss))
-    operation_id = json.loads(
-        self.lnm.market_short(
-            quantity=quantity,
-            leverage=leverage,
-            takeprofit=tp,
-            stoploss=sl,
-        )
+    operation_id = self.lnm.market_short(
+        quantity=quantity,
+        leverage=leverage,
+        takeprofit=tp,
+        stoploss=sl,
     )["id"]
     id_list.append(operation_id)
 
@@ -162,9 +157,9 @@ class MA7RSIStochLive:
         while True:
             candles = self._fetch_ohlcv(symbol=symbol, interval=interval, lookback=lookback)
             signal, exhausted = self._get_signal_pack(candles, **signal_kwargs)
-            last_price = json.loads(self.lnm.get_last())["lastPrice"]
+            last_price = self.lnm.get_last_price()
 
-            running_positions = json.loads(self.lnm.get_trades(type_trade="running"))
+            running_positions = self.lnm.get_trades(type_trade="running")
             id_running = [p["id"] for p in running_positions]
 
             if side == "long" and self.entry_price:
@@ -237,7 +232,7 @@ class MA7RSIStochLive:
         for operation_id in id_list[:]:
             self.process_close(operation_id, id_list)
 
-        closed_positions = json.loads(self.lnm.get_trades(type_trade="closed"))
+        closed_positions = self.lnm.get_trades(type_trade="closed")
         df_closed_positions = pd.DataFrame.from_dict(closed_positions)
         df_closed_pos = df_closed_positions[df_closed_positions["id"].isin(closed_ids)].copy()
         if not df_closed_pos.empty:
